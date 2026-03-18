@@ -1,5 +1,7 @@
 # generative-ui
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 Platform-agnostic generative UI library for LLMs. Render interactive HTML/SVG widgets from any AI model, streaming in real-time with DOM diffing.
 
 Inspired by [Claude's generative UI system](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/) — reverse-engineered and rebuilt as a standalone web module.
