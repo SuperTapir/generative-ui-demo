@@ -4,6 +4,10 @@ Platform-agnostic generative UI library for LLMs. Render interactive HTML/SVG wi
 
 Inspired by [Claude's generative UI system](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/) — reverse-engineered and rebuilt as a standalone web module.
 
+## Demo
+
+https://github.com/SuperTapir/generative-ui-demo/raw/main/assets/demo.mp4
+
 ## What it does
 
 LLM calls a `show_widget` tool → generates HTML/SVG → the library renders it inline with streaming DOM diffing via morphdom. Charts, diagrams, interactive controls, animations — all rendered progressively as tokens arrive.
