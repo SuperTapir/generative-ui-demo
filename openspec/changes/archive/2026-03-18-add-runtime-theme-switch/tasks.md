@@ -1,0 +1,5 @@
+- [x] 1.1 Add `shadowStyles` map and `currentTheme` state to renderer
+- [x] 1.2 Add `setTheme(newTheme)` method to renderer — re-generates CSS for all widgets
+- [x] 1.3 Clean up `shadowStyles` in widget `destroy()` and renderer `destroy()`
+- [x] 1.4 Demo: track `activeRenderers`, call `setTheme()` on toggle
+- [x] 1.5 Build passes

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Generative UI — Demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <h1>Generative UI</h1>
+      <p class="subtitle">Platform-agnostic interactive widgets from LLMs</p>
+      <div class="header-controls">
+        <span id="config-info" class="config-info"></span>
+        <label class="theme-toggle">
+          <input type="checkbox" id="theme-toggle" />
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">Dark</span>
+        </label>
+      </div>
+    </header>
+
+    <main class="chat-area" id="chat-area">
+      <div class="welcome-message" id="welcome">
+        <p>Ask the model to visualize something.</p>
+        <div class="example-prompts">
+          <button class="example-btn" data-prompt="Show me how compound interest works with an interactive calculator">Compound interest</button>
+          <button class="example-btn" data-prompt="Create a dashboard showing quarterly revenue data with charts">Revenue dashboard</button>
+          <button class="example-btn" data-prompt="Visualize the architecture of a transformer neural network">Transformer architecture</button>
+          <button class="example-btn" data-prompt="Draw a comparison card for three cloud providers: AWS, GCP, Azure">Cloud comparison</button>
+        </div>
+      </div>
+      <div id="messages"></div>
+    </main>
+
+    <footer class="input-area">
+      <div class="message-bar">
+        <textarea id="user-input" placeholder="Ask to visualize something..." rows="1"></textarea>
+        <button id="send-btn" class="send-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="main.ts"></script>
+</body>
+</html>
