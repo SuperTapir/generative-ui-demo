@@ -1,0 +1,81 @@
+{
+  "name": "generative-ui",
+  "version": "0.3.0",
+  "description": "Platform-agnostic generative UI library for LLMs - render interactive HTML widgets from any AI model",
+  "type": "module",
+  "sideEffects": false,
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./renderer": {
+      "import": {
+        "types": "./dist/renderer.d.ts",
+        "default": "./dist/renderer.js"
+      },
+      "require": {
+        "types": "./dist/renderer.d.cts",
+        "default": "./dist/renderer.cjs"
+      }
+    },
+    "./adapters/openai": {
+      "import": {
+        "types": "./dist/adapters/openai.d.ts",
+        "default": "./dist/adapters/openai.js"
+      },
+      "require": {
+        "types": "./dist/adapters/openai.d.cts",
+        "default": "./dist/adapters/openai.cjs"
+      }
+    },
+    "./adapters/anthropic": {
+      "import": {
+        "types": "./dist/adapters/anthropic.d.ts",
+        "default": "./dist/adapters/anthropic.js"
+      },
+      "require": {
+        "types": "./dist/adapters/anthropic.d.cts",
+        "default": "./dist/adapters/anthropic.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "generative-ui",
+    "llm",
+    "ai",
+    "widget",
+    "streaming",
+    "openai",
+    "anthropic",
+    "function-calling",
+    "tool-calling"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "morphdom": "^2.7.8"
+  }
+}

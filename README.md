@@ -4,7 +4,7 @@
 
 Platform-agnostic generative UI library for LLMs. Render interactive HTML/SVG widgets from any AI model, streaming in real-time with DOM diffing.
 
-Inspired by [Claude's generative UI system](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/) — reverse-engineered and rebuilt as a standalone web module.
+Inspired by [Claude's generative UI system](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/) — reverse-engineered and rebuilt as standalone packages.
 
 ## Demo
 
@@ -14,64 +14,108 @@ https://github.com/user-attachments/assets/1cb88122-0fe3-4e12-8d09-593df393122a
 
 LLM calls a `show_widget` tool → generates HTML/SVG → the library renders it inline with streaming DOM diffing via morphdom. Charts, diagrams, interactive controls, animations — all rendered progressively as tokens arrive.
 
-## Getting started
+## Packages
 
-### 1. Clone and install
+| Package | Language | Install | Purpose |
+|---------|----------|---------|---------|
+| [`generative-ui`](./packages/js/) | JS/TS | `npm install generative-ui` | Frontend renderer, streaming, adapters, tool schemas |
+| [`generative-ui`](./packages/python/) | Python | `pip install generative-ui` | Tool schemas + system prompt for Python backends |
+| [Demo app](./demo/) | Python + JS | See below | Reference "bring your own backend" implementation |
 
-```bash
-git clone https://github.com/SuperTapir/generative-ui-demo.git
-cd generative-ui-demo
-npm install
+## Quick start
+
+### 1. Get tool schemas (any backend)
+
+**Python backend:**
+
+```python
+from generative_ui import get_tools, get_system_prompt, execute_read_me
+import anthropic
+
+client = anthropic.Anthropic()
+
+response = client.messages.create(
+    model="claude-sonnet-4-6",
+    system=get_system_prompt(),
+    tools=get_tools(),               # Anthropic format by default
+    messages=[{"role": "user", "content": "Draw a flowchart"}],
+)
+
+# Handle read_me tool calls
+for block in response.content:
+    if block.type == "tool_use" and block.name == "read_me":
+        result = execute_read_me(block.input["modules"])
 ```
 
-### 2. Configure environment
+**JS/TS backend (any framework):**
 
-```bash
-cp .env.example .env
+```typescript
+import { getAnthropicTools, getSystemPromptSnippet, executeReadMe } from "generative-ui";
+
+// Pass these to your LLM call
+const tools = getAnthropicTools();    // or getOpenAITools()
+const system = getSystemPromptSnippet();
+
+// Handle read_me tool calls
+const guidelines = executeReadMe(["interactive", "chart"]);
 ```
 
-Edit `.env` with your settings:
+### 2. Render widgets (frontend)
 
-```bash
-# LLM Provider: "anthropic" or "openai"
-LLM_PROVIDER=anthropic
+```typescript
+import {
+  createRenderer,
+  createStreamingHandler,
+  createAnthropicAdapter,
+} from "generative-ui";
 
-# API Base URL (auto-appends /v1/messages or /v1/chat/completions)
-LLM_BASE_URL=https://api.anthropic.com
+// 1. Create a renderer targeting a DOM container
+const renderer = createRenderer({
+  container: document.getElementById("widgets")!,
+  theme: "auto",
+});
 
-# Model name
-LLM_MODEL=claude-sonnet-4-6
+// 2. Create a streaming handler
+const handler = createStreamingHandler({
+  renderer,
+  onWidgetCreated: (w) => console.log("Widget created:", w.title),
+  onWidgetComplete: (w) => console.log("Widget ready:", w.title),
+});
 
-# Your API key
-LLM_API_KEY=sk-your-api-key-here
+// 3. Parse streaming response with an adapter
+const adapter = createAnthropicAdapter();
+// ... feed SSE events through adapter.processEvent() → handler.processEvent()
 ```
 
-> **Using a proxy or local gateway?** Just set `LLM_BASE_URL` to your endpoint — the server auto-appends the correct path based on the provider.
-
-### 3. Run
-
-```bash
-npm run dev
-```
-
-Open http://localhost:3000 and ask the model to visualize something.
+See the [demo app](./demo/) for a complete working example.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    Your Application                  │
-├──────────┬──────────┬───────────────┬───────────────┤
-│  tools   │ adapters │   streaming   │   renderer    │
-│          │          │               │               │
-│ OpenAI   │ OpenAI   │ StreamEvent   │ iframe +      │
-│ Anthropic│ Anthropic│ processing    │ morphdom      │
-│ Generic  │          │ + debounce    │ DOM diffing   │
-├──────────┴──────────┴───────────────┴───────────────┤
-│              guidelines (from Claude.ai)             │
-│         72KB of design rules, lazy-loaded            │
+│                  Your Application                     │
+├──────────────────────┬──────────────────────────────┤
+│      Frontend (JS)   │      Backend (any language)   │
+│                      │                               │
+│  renderer (Shadow    │  Python: get_tools(),          │
+│    DOM + morphdom)   │    get_system_prompt()         │
+│  streaming handler   │  JS: getAnthropicTools(),      │
+│  adapters (OpenAI/   │    getSystemPromptSnippet()    │
+│           Anthropic) │  YOUR LLM API call             │
+├──────────────────────┴──────────────────────────────┤
+│           guidelines (from Claude.ai)                 │
+│        72KB of design rules, lazy-loaded              │
 └─────────────────────────────────────────────────────┘
 ```
+
+### JS package exports
+
+| Import path | Content | Runtime |
+|---|---|---|
+| `generative-ui` | Renderer, streaming, adapters, tools, types | Browser/Node |
+| `generative-ui/renderer` | Renderer only (tree-shake) | Browser |
+| `generative-ui/adapters/openai` | OpenAI adapter only | Isomorphic |
+| `generative-ui/adapters/anthropic` | Anthropic adapter only | Isomorphic |
 
 ## Core concepts
 
@@ -81,15 +125,6 @@ Get LLM-ready tool schemas for any provider:
 
 ```typescript
 import { getOpenAITools, getAnthropicTools, getGenericTools } from "generative-ui";
-
-// OpenAI function-calling format
-const tools = getOpenAITools();
-
-// Anthropic format
-const tools = getAnthropicTools();
-
-// Generic format (for custom integrations)
-const tools = getGenericTools();
 ```
 
 Two tools are defined:
@@ -99,18 +134,6 @@ Two tools are defined:
 ### 2. Design guidelines
 
 Extracted verbatim from Claude.ai's `visualize:read_me` tool responses. 72KB of production rules covering typography, color palettes, streaming-safe CSS patterns, Chart.js configuration, SVG diagram engineering.
-
-```typescript
-import { executeReadMe, getGuidelines } from "generative-ui";
-
-// Execute the read_me tool (returns guidelines for the requested modules)
-const guidelines = executeReadMe(["interactive", "chart"]);
-
-// Or get guidelines directly
-const content = getGuidelines(["diagram"]);
-```
-
-5 modules, loaded on demand:
 
 | Module      | What it covers                                        |
 |-------------|-------------------------------------------------------|
@@ -122,7 +145,7 @@ const content = getGuidelines(["diagram"]);
 
 ### 3. Widget renderer
 
-Renders HTML in a sandboxed iframe with DOM diffing for smooth streaming:
+Shadow DOM-based renderer with streaming-optimized DOM diffing:
 
 ```typescript
 import { createRenderer } from "generative-ui";
@@ -133,122 +156,106 @@ const renderer = createRenderer({
   maxWidth: 800,
   onPrompt: (text) => { /* widget called sendPrompt() */ },
 });
-
-const widget = renderer.createWidget("compound_interest");
-widget.update("<div>partial HTML...</div>");
-widget.update("<div>more content...</div>");  // morphdom diffs, only new nodes animate
-widget.activate();  // execute <script> tags
 ```
 
-### 4. Streaming handler
-
-Processes normalized stream events and manages progressive widget rendering:
-
-```typescript
-import { createStreamingHandler } from "generative-ui";
-
-const handler = createStreamingHandler({
-  renderer,
-  debounceMs: 150,
-  onWidgetCreated: (widget) => console.log("Widget created:", widget.title),
-  onWidgetComplete: (widget) => console.log("Widget ready:", widget.title),
-});
-
-// Feed events from the adapter
-handler.processEvent(event);
-
-// Or render a complete widget directly
-handler.renderWidget({
-  i_have_seen_read_me: true,
-  title: "my_widget",
-  widget_code: "<div>complete HTML</div>",
-});
-```
-
-### 5. LLM adapters
+### 4. LLM adapters
 
 Normalize provider-specific streaming chunks into unified `StreamEvent` objects:
 
 ```typescript
 import { createOpenAIAdapter, createAnthropicAdapter } from "generative-ui";
-
-// OpenAI
-const openaiAdapter = createOpenAIAdapter();
-for await (const chunk of openaiStream) {
-  const events = openaiAdapter.processChunk(chunk);
-  for (const event of events) {
-    streamingHandler.processEvent(event);
-  }
-}
-
-// Anthropic
-const anthropicAdapter = createAnthropicAdapter();
-for await (const event of anthropicStream) {
-  const events = anthropicAdapter.processEvent(event);
-  for (const ev of events) {
-    streamingHandler.processEvent(ev);
-  }
-}
 ```
 
-## Streaming flow
+## Running the demo
 
+The demo uses a Python FastAPI backend (managed by [uv](https://docs.astral.sh/uv/)) + vanilla JS frontend.
+
+### Prerequisites
+
+- Node.js 18+ and pnpm
+- Python 3.9+ and [uv](https://docs.astral.sh/uv/)
+- An Anthropic API key (or compatible proxy)
+
+### Setup
+
+```bash
+git clone https://github.com/anthropics/generative-ui.git
+cd generative-ui
+
+# Install JS dependencies and build the JS SDK
+pnpm install
+pnpm build:js
+
+# Install demo backend dependencies
+cd demo/backend
+uv sync
+
+# Configure environment
+cp .env.example .env
+# Edit .env — set your API key, base URL, model
 ```
-LLM starts generating show_widget tool call
-  │
-  ├── tool_call_start → initialize streaming state
-  │
-  ├── tool_call_delta (repeated, every ~token)
-  │   ├── debounce 150ms
-  │   ├── first time: create iframe with shell HTML + morphdom
-  │   ├── subsequent: postMessage → morphdom diffs old vs new DOM
-  │   │   └── new nodes get 0.3s fade-in animation
-  │   │   └── unchanged nodes stay untouched
-  │   │
-  ├── tool_call_end
-  │   ├── final content update
-  │   └── activate <script> tags (Chart.js, D3, etc.)
-  │
-  └── Widget ready for interaction
+
+`.env` example:
+
+```bash
+ANTHROPIC_API_KEY=sk-xxx
+ANTHROPIC_BASE_URL=http://localhost:8082   # optional, for proxy/gateway
+ANTHROPIC_MODEL=claude-sonnet-4-6          # optional, default: claude-sonnet-4-6
 ```
 
-## Key differences from the original
+### Run
 
-| Original (pi-generative-ui) | This project |
-|------------------------------|--------------|
-| Pi extension API | Standalone library |
-| macOS only (Glimpse/WKWebView) | Any browser (iframe sandbox) |
-| Native macOS window | Inline iframe rendering |
-| Pi streaming events | OpenAI / Anthropic adapters |
-| Dark mode only | Light + dark + auto theme |
+In two terminals:
+
+```bash
+# Terminal 1: Start FastAPI backend
+cd demo/backend
+uv run --env-file .env uvicorn main:app --reload --port 8000
+
+# Terminal 2: Start Vite frontend (from project root)
+pnpm dev:frontend
+```
+
+Open http://localhost:3000
 
 ## Project structure
 
 ```
 generative-ui/
-├── src/
-│   ├── index.ts           # Main exports
-│   ├── types.ts           # TypeScript type definitions
-│   ├── tools.ts           # Tool schemas (OpenAI, Anthropic, Generic)
-│   ├── guidelines.ts      # 72KB verbatim Claude.ai design guidelines
-│   ├── svg-styles.ts      # Pre-built CSS classes for SVG diagrams
-│   ├── renderer.ts        # iframe-based widget renderer with morphdom
-│   ├── streaming.ts       # Streaming event handler with debouncing
-│   ├── adapters/
-│   │   ├── openai.ts      # OpenAI streaming adapter
-│   │   ├── anthropic.ts   # Anthropic streaming adapter
-│   │   └── index.ts
-│   └── claude-guidelines/ # Raw extracted markdown (reference)
-│       ├── CORE.md
-│       ├── art.md, chart.md, diagram.md, ...
-│       └── sections/      # Deduplicated sections + mapping.json
+├── packages/
+│   ├── js/                    # JS/TS client SDK (npm: generative-ui)
+│   │   ├── src/
+│   │   │   ├── index.ts       # Barrel export
+│   │   │   ├── types.ts       # TypeScript types
+│   │   │   ├── tools.ts       # Tool schemas + system prompt
+│   │   │   ├── guidelines.ts  # 72KB Claude.ai design guidelines
+│   │   │   ├── renderer.ts    # Shadow DOM renderer + morphdom
+│   │   │   ├── streaming.ts   # Streaming event handler
+│   │   │   ├── svg-styles.ts  # CSS classes for SVG diagrams
+│   │   │   └── adapters/      # OpenAI + Anthropic adapters
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── tsup.config.ts
+│   └── python/                # Python SDK (pip: generative-ui)
+│       ├── src/generative_ui/
+│       │   ├── __init__.py    # get_tools(), get_system_prompt()
+│       │   ├── tools.py       # Tool schemas (Anthropic + OpenAI)
+│       │   ├── prompt.py      # System prompt builder
+│       │   ├── guidelines.py  # Guidelines loader
+│       │   └── data/guidelines/  # Markdown guideline files
+│       └── pyproject.toml
 ├── demo/
-│   ├── index.html         # Demo chat UI
-│   ├── main.ts            # Demo logic with full OpenAI/Anthropic support
-│   └── style.css
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
+│   ├── backend/               # FastAPI demo server
+│   │   ├── main.py
+│   │   └── pyproject.toml
+│   └── frontend/              # Vanilla JS/TS demo client
+│       ├── index.html
+│       ├── main.ts
+│       ├── style.css
+│       ├── vite.config.ts
+│       └── package.json
+├── pnpm-workspace.yaml
+└── package.json               # Workspace root
 ```
 
 ## Credits

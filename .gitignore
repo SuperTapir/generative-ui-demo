@@ -3,8 +3,14 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .env
-.env.*
-!.env.example
 *.bak
 .claude/
 .cursor/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.venv/
+venv/

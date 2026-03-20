@@ -4,7 +4,7 @@
 
 跨平台的 LLM 生成式 UI 库。支持任意 AI 模型实时流式渲染交互式 HTML/SVG 组件，基于 DOM diff 实现平滑更新。
 
-灵感来源于 [Claude 的生成式 UI 系统](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)——逆向工程后重新构建为独立的 Web 模块。
+灵感来源于 [Claude 的生成式 UI 系统](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)——逆向工程后重新构建为独立的包。
 
 ## 演示
 
@@ -14,62 +14,97 @@ https://github.com/user-attachments/assets/1cb88122-0fe3-4e12-8d09-593df393122a
 
 LLM 调用 `show_widget` 工具 → 生成 HTML/SVG → 库通过 morphdom 进行流式 DOM diff 渲染。图表、流程图、交互控件、动画——全部随 token 到达逐步渲染。
 
+## 包说明
+
+| 包 | 语言 | 安装 | 用途 |
+|-----|------|------|------|
+| [`generative-ui`](./packages/js/) | JS/TS | `npm install generative-ui` | 前端渲染器、流式处理、适配器、工具 schema |
+| [`generative-ui`](./packages/python/) | Python | `pip install generative-ui` | 工具 schema + 系统提示词（Python 后端） |
+| [Demo 应用](./demo/) | Python + JS | 见下方 | "自带后端"集成模式的参考实现 |
+
 ## 快速开始
 
-### 1. 克隆并安装
+### 1. 获取工具 schema（任意后端）
 
-```bash
-git clone https://github.com/SuperTapir/generative-ui-demo.git
-cd generative-ui-demo
-npm install
+**Python 后端：**
+
+```python
+from generative_ui import get_tools, get_system_prompt, execute_read_me
+import anthropic
+
+client = anthropic.Anthropic()
+
+response = client.messages.create(
+    model="claude-sonnet-4-6",
+    system=get_system_prompt(),
+    tools=get_tools(),               # 默认 Anthropic 格式
+    messages=[{"role": "user", "content": "画一个流程图"}],
+)
+
+# 处理 read_me 工具调用
+for block in response.content:
+    if block.type == "tool_use" and block.name == "read_me":
+        result = execute_read_me(block.input["modules"])
 ```
 
-### 2. 配置环境变量
+**JS/TS 后端（任意框架）：**
 
-```bash
-cp .env.example .env
+```typescript
+import { getAnthropicTools, getSystemPromptSnippet, executeReadMe } from "generative-ui";
+
+// 传递给你的 LLM 调用
+const tools = getAnthropicTools();    // 或 getOpenAITools()
+const system = getSystemPromptSnippet();
+
+// 处理 read_me 工具调用
+const guidelines = executeReadMe(["interactive", "chart"]);
 ```
 
-编辑 `.env` 文件：
+### 2. 渲染组件（前端）
 
-```bash
-# LLM 服务商："anthropic" 或 "openai"
-LLM_PROVIDER=anthropic
+```typescript
+import {
+  createRenderer,
+  createStreamingHandler,
+  createAnthropicAdapter,
+} from "generative-ui";
 
-# API 地址（会自动拼接 /v1/messages 或 /v1/chat/completions）
-LLM_BASE_URL=https://api.anthropic.com
+// 1. 创建渲染器，指向 DOM 容器
+const renderer = createRenderer({
+  container: document.getElementById("widgets")!,
+  theme: "auto",
+});
 
-# 模型名称
-LLM_MODEL=claude-sonnet-4-6
+// 2. 创建流式处理器
+const handler = createStreamingHandler({
+  renderer,
+  onWidgetCreated: (w) => console.log("组件已创建:", w.title),
+  onWidgetComplete: (w) => console.log("组件就绪:", w.title),
+});
 
-# 你的 API Key
-LLM_API_KEY=sk-your-api-key-here
+// 3. 使用适配器解析流式响应
+const adapter = createAnthropicAdapter();
+// ... 将 SSE 事件通过 adapter.processEvent() → handler.processEvent() 传递
 ```
 
-> **用代理或本地网关？** 直接把 `LLM_BASE_URL` 设为你的地址就行，服务端会根据 provider 自动拼接正确的路径。
-
-### 3. 启动
-
-```bash
-npm run dev
-```
-
-打开 http://localhost:3000，让模型帮你可视化任何内容。
+完整示例请参考 [Demo 应用](./demo/)。
 
 ## 架构
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                      你的应用                        │
-├──────────┬──────────┬───────────────┬───────────────┤
-│  工具     │  适配器   │   流式处理     │   渲染器      │
-│          │          │               │               │
-│ OpenAI   │ OpenAI   │ StreamEvent   │ iframe +      │
-│ Anthropic│ Anthropic│ 事件处理       │ morphdom      │
-│ Generic  │          │ + 防抖        │ DOM diff      │
-├──────────┴──────────┴───────────────┴───────────────┤
-│             设计规范 (来自 Claude.ai)                  │
-│            72KB 设计规则，按需加载                      │
+│                      你的应用                         │
+├──────────────────────┬──────────────────────────────┤
+│    前端 (JS)          │      后端（任意语言）          │
+│                      │                               │
+│  渲染器 (Shadow      │  Python: get_tools(),          │
+│    DOM + morphdom)   │    get_system_prompt()         │
+│  流式处理器           │  JS: getAnthropicTools(),      │
+│  适配器 (OpenAI/     │    getSystemPromptSnippet()    │
+│         Anthropic)   │  你自己的 LLM API 调用          │
+├──────────────────────┴──────────────────────────────┤
+│           设计规范 (来自 Claude.ai)                    │
+│          72KB 设计规则，按需加载                        │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -81,15 +116,6 @@ npm run dev
 
 ```typescript
 import { getOpenAITools, getAnthropicTools, getGenericTools } from "generative-ui";
-
-// OpenAI function-calling 格式
-const tools = getOpenAITools();
-
-// Anthropic 格式
-const tools = getAnthropicTools();
-
-// 通用格式（自定义集成）
-const tools = getGenericTools();
 ```
 
 定义了两个工具：
@@ -99,18 +125,6 @@ const tools = getGenericTools();
 ### 2. 设计规范
 
 原样提取自 Claude.ai 的 `visualize:read_me` 工具响应。72KB 的生产级规则，涵盖排版、配色、流式安全 CSS 模式、Chart.js 配置、SVG 图表工程。
-
-```typescript
-import { executeReadMe, getGuidelines } from "generative-ui";
-
-// 执行 read_me 工具（返回请求模块的设计规范）
-const guidelines = executeReadMe(["interactive", "chart"]);
-
-// 或直接获取规范内容
-const content = getGuidelines(["diagram"]);
-```
-
-5 个模块，按需加载：
 
 | 模块        | 涵盖内容                                               |
 |-------------|-------------------------------------------------------|
@@ -122,133 +136,102 @@ const content = getGuidelines(["diagram"]);
 
 ### 3. 组件渲染器
 
-在沙盒 iframe 中渲染 HTML，通过 DOM diff 实现平滑的流式更新：
+基于 Shadow DOM 的沙盒渲染器，通过 DOM diff 实现平滑流式更新。
 
-```typescript
-import { createRenderer } from "generative-ui";
+### 4. LLM 适配器
 
-const renderer = createRenderer({
-  container: document.getElementById("widgets"),
-  theme: "auto",        // "light" | "dark" | "auto"
-  maxWidth: 800,
-  onPrompt: (text) => { /* 组件调用了 sendPrompt() */ },
-});
+将各服务商特定的流式数据块转换为统一的 `StreamEvent` 对象。
 
-const widget = renderer.createWidget("compound_interest");
-widget.update("<div>部分 HTML...</div>");
-widget.update("<div>更多内容...</div>");  // morphdom diff，只有新节点有动画
-widget.activate();  // 执行 <script> 标签
+## 运行 Demo
+
+Demo 使用 Python FastAPI 后端 + 原生 JS 前端。
+
+### 前提条件
+
+- Node.js 18+ 和 pnpm
+- Python 3.9+ 和 [uv](https://docs.astral.sh/uv/)
+- Anthropic API Key（或兼容的代理服务）
+
+### 安装
+
+```bash
+git clone https://github.com/anthropics/generative-ui.git
+cd generative-ui
+
+# 安装 JS 依赖并构建 JS SDK
+pnpm install
+pnpm build:js
+
+# 安装 Demo 后端依赖
+cd demo/backend
+uv sync
+
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env —— 设置你的 API Key、Base URL、模型
 ```
 
-### 4. 流式处理器
+`.env` 示例：
 
-处理标准化的流式事件，管理渐进式组件渲染：
-
-```typescript
-import { createStreamingHandler } from "generative-ui";
-
-const handler = createStreamingHandler({
-  renderer,
-  debounceMs: 150,
-  onWidgetCreated: (widget) => console.log("组件已创建:", widget.title),
-  onWidgetComplete: (widget) => console.log("组件就绪:", widget.title),
-});
-
-// 从适配器输入事件
-handler.processEvent(event);
-
-// 或直接渲染完整组件
-handler.renderWidget({
-  i_have_seen_read_me: true,
-  title: "my_widget",
-  widget_code: "<div>完整 HTML</div>",
-});
+```bash
+ANTHROPIC_API_KEY=sk-xxx
+ANTHROPIC_BASE_URL=http://localhost:8082   # 可选，用于代理/网关
+ANTHROPIC_MODEL=claude-sonnet-4-6          # 可选，默认: claude-sonnet-4-6
 ```
 
-### 5. LLM 适配器
+### 启动
 
-将各服务商特定的流式数据块转换为统一的 `StreamEvent` 对象：
+在两个终端中分别运行：
 
-```typescript
-import { createOpenAIAdapter, createAnthropicAdapter } from "generative-ui";
+```bash
+# 终端 1：启动 FastAPI 后端
+cd demo/backend
+uv run --env-file .env uvicorn main:app --reload --port 8000
 
-// OpenAI
-const openaiAdapter = createOpenAIAdapter();
-for await (const chunk of openaiStream) {
-  const events = openaiAdapter.processChunk(chunk);
-  for (const event of events) {
-    streamingHandler.processEvent(event);
-  }
-}
-
-// Anthropic
-const anthropicAdapter = createAnthropicAdapter();
-for await (const event of anthropicStream) {
-  const events = anthropicAdapter.processEvent(event);
-  for (const ev of events) {
-    streamingHandler.processEvent(ev);
-  }
-}
+# 终端 2：启动 Vite 前端（在项目根目录）
+pnpm dev:frontend
 ```
 
-## 流式渲染流程
-
-```
-LLM 开始生成 show_widget 工具调用
-  │
-  ├── tool_call_start → 初始化流式状态
-  │
-  ├── tool_call_delta（重复，每 ~token 一次）
-  │   ├── 150ms 防抖
-  │   ├── 首次：创建 iframe + morphdom shell HTML
-  │   ├── 后续：postMessage → morphdom diff 新旧 DOM
-  │   │   └── 新节点有 0.3s 淡入动画
-  │   │   └── 未变更节点保持不动
-  │   │
-  ├── tool_call_end
-  │   ├── 最终内容更新
-  │   └── 激活 <script> 标签（Chart.js、D3 等）
-  │
-  └── 组件就绪，可交互
-```
-
-## 与原版的区别
-
-| 原版 (pi-generative-ui)           | 本项目                           |
-|-----------------------------------|----------------------------------|
-| Pi 扩展 API                       | 独立库                           |
-| 仅 macOS（Glimpse/WKWebView）     | 任意浏览器（iframe 沙盒）         |
-| 原生 macOS 窗口                    | 内联 iframe 渲染                 |
-| Pi 流式事件                        | OpenAI / Anthropic 适配器        |
-| 仅深色模式                         | 浅色 + 深色 + 自动主题            |
+打开 http://localhost:3000
 
 ## 项目结构
 
 ```
 generative-ui/
-├── src/
-│   ├── index.ts           # 主入口导出
-│   ├── types.ts           # TypeScript 类型定义
-│   ├── tools.ts           # 工具 schema（OpenAI、Anthropic、通用）
-│   ├── guidelines.ts      # 72KB Claude.ai 原版设计规范
-│   ├── svg-styles.ts      # SVG 图表预置 CSS 类
-│   ├── renderer.ts        # 基于 iframe 的组件渲染器 + morphdom
-│   ├── streaming.ts       # 流式事件处理器 + 防抖
-│   ├── adapters/
-│   │   ├── openai.ts      # OpenAI 流式适配器
-│   │   ├── anthropic.ts   # Anthropic 流式适配器
-│   │   └── index.ts
-│   └── claude-guidelines/ # 原始提取的 Markdown（参考）
-│       ├── CORE.md
-│       ├── art.md、chart.md、diagram.md 等
-│       └── sections/      # 去重后的章节 + mapping.json
+├── packages/
+│   ├── js/                    # JS/TS 客户端 SDK (npm: generative-ui)
+│   │   ├── src/
+│   │   │   ├── index.ts       # 主入口导出
+│   │   │   ├── types.ts       # TypeScript 类型定义
+│   │   │   ├── tools.ts       # 工具 schema + 系统提示词
+│   │   │   ├── guidelines.ts  # 72KB Claude.ai 设计规范
+│   │   │   ├── renderer.ts    # Shadow DOM 渲染器 + morphdom
+│   │   │   ├── streaming.ts   # 流式事件处理器
+│   │   │   ├── svg-styles.ts  # SVG 图表预置 CSS 类
+│   │   │   └── adapters/      # OpenAI + Anthropic 适配器
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── tsup.config.ts
+│   └── python/                # Python SDK (pip: generative-ui)
+│       ├── src/generative_ui/
+│       │   ├── __init__.py    # get_tools(), get_system_prompt()
+│       │   ├── tools.py       # 工具 schema (Anthropic + OpenAI)
+│       │   ├── prompt.py      # 系统提示词构建器
+│       │   ├── guidelines.py  # 设计规范加载器
+│       │   └── data/guidelines/  # Markdown 规范文件
+│       └── pyproject.toml
 ├── demo/
-│   ├── index.html         # 演示聊天 UI
-│   ├── main.ts            # 演示逻辑，支持 OpenAI/Anthropic
-│   └── style.css
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
+│   ├── backend/               # FastAPI Demo 服务端
+│   │   ├── main.py
+│   │   └── pyproject.toml
+│   └── frontend/              # 原生 JS/TS Demo 客户端
+│       ├── index.html
+│       ├── main.ts
+│       ├── style.css
+│       ├── vite.config.ts
+│       └── package.json
+├── pnpm-workspace.yaml
+└── package.json               # 工作区根配置
 ```
 
 ## 致谢
